@@ -33,7 +33,7 @@ jobs:
     - name: Create pull request
       uses: metronnie/release-actions/create-pr@dev
       env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         head: ${{ env.BRANCH_NAME }}
         title: 'Auto PR: update copyright year'
