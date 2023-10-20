@@ -54,6 +54,10 @@ jobs:
         if: ${{ !matrix.coverage }}
         run: flake8
 
+      - name: Type checking
+        if: ${{ !matrix.coverage }}
+        run: mypy
+
       - name: Bandit
         if: ${{ !matrix.coverage }}
         run: bandit -r metomi/isodatetime -c pyproject.toml
