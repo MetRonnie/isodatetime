@@ -993,6 +993,43 @@ def test_timepoint_without_year():
 
 
 @pytest.mark.parametrize(
+    'timepoint, expected',
+    [
+        (
+            data.TimePoint(
+                year=2014,
+                month_of_year=4,
+                day_of_month=1,
+                minute_of_hour=52,
+                time_zone_hour=2,
+                time_zone_minute=15,
+            ),
+            [
+                ('num_expanded_year_digits', 0),
+                ('year', 2014),
+                ('month_of_year', 4),
+                ('day_of_year', None),
+                ('day_of_month', 1),
+                ('day_of_week', None),
+                ('week_of_year', None),
+                ('hour_of_day', 0),
+                ('minute_of_hour', 52),
+                ('second_of_minute', 0),
+                ('truncated', False),
+                ('truncated_property', None),
+                ('truncated_dump_format', None),
+                ('dump_format', None),
+                ('time_zone', data.TimeZone(2, 15)),
+            ],
+        ),
+    ],
+)
+def test_timepoint_get_props(timepoint: data.TimePoint, expected: list):
+    """Test TimePoint.get_props()"""
+    assert timepoint.get_props() == expected
+
+
+@pytest.mark.parametrize(
     'calendar_mode, year, expected',
     [
         (Calendar.MODE_GREGORIAN, 2004, 2004),
