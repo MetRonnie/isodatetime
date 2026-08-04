@@ -23,6 +23,7 @@ from functools import lru_cache
 from math import floor
 import operator
 from typing import (
+    Any,
     Literal,
     cast,
     overload,
@@ -1727,16 +1728,12 @@ class TimePoint:
         new_timepoint._time_zone = self._time_zone._copy()
         return new_timepoint
 
-    def get_props(self) -> list:
+    def get_props(self) -> list[tuple[str, Any]]:
         """Return the data properties of this TimePoint as a list of tuples."""
-        props = []
-        for attr in self.__slots__:
-            value = getattr(self, attr, None)
-            if callable(getattr(value, "_copy", None)):
-                value = value._copy()
-            props.append((attr[1:], value))
+        return [
             # Have sliced attr string to remove leading underscore
-        return props
+            (attr[1:], getattr(self, attr, None)) for attr in self.__slots__
+        ]
 
     def __hash__(self) -> int:
         if self._truncated:
@@ -2632,7 +2629,7 @@ def get_timepoint_properties_from_seconds_since_unix_epoch(num_seconds):
     """Translate Unix time into a dict of TimePoint constructor properties."""
     properties = dict(
         get_timepoint_from_seconds_since_unix_epoch(num_seconds).get_props())
-    time_zone = properties.pop("time_zone")
+    time_zone = cast('TimeZone', properties.pop("time_zone"))
     properties["time_zone_hour"] = time_zone._hours
     properties["time_zone_minute"] = time_zone._minutes
     return properties
