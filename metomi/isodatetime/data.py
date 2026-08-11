@@ -28,6 +28,7 @@ from typing import (
     Self,
     cast,
     overload,
+    NoReturn,
 )
 
 from . import (
@@ -37,8 +38,10 @@ from . import (
 from .exceptions import BadInputError
 
 
-_operator_map = {op.__name__: op for op in [
-    operator.eq, operator.lt, operator.le, operator.gt, operator.ge]}
+_operator_map = {
+    op.__name__: op
+    for op in [operator.eq, operator.lt, operator.le, operator.gt, operator.ge]
+}
 
 
 class Calendar:
@@ -466,31 +469,42 @@ class Duration:
 
     Keyword arguments:
 
-    years (int): number of calendar years in the duration (an inexact unit
+    years: number of calendar years in the duration (an inexact unit
         due to the possibility of leap years).
-    months (int) number of calendar months in the duration (also an inexact
+    months: number of calendar months in the duration (also an inexact
         unit due to the differing number of calendar days in the calendar
         months).
-    weeks (int): number of calendar weeks in the duration - cannot be used in
+    weeks: number of calendar weeks in the duration - cannot be used in
         conjunction with other units (use multiples of 7 days instead).
-    days (int): number of calendar days in the duration.
-    hours (float): number of hours in the duration.
-    minutes (float): number of minutes in the duration.
-    seconds (float): number of seconds in the duration.
-    standardize (bool): if True, switches on adjusting the attributes so that
+    days: number of calendar days in the duration.
+    hours: number of hours in the duration.
+    minutes: number of minutes in the duration.
+    seconds: number of seconds in the duration.
+    standardize: if True, switches on adjusting the attributes so that
         small units have minimal values. For example, 3664.4 seconds would
         become 1 hour, 1 minute, and 4.4 seconds. Attributes will not adjust
         for units that are inexact (months and years).
-    _is_empty_instance (bool): If True, do not set any properties yet. These
+    _is_empty_instance: If True, do not set any properties yet. These
         should be set as part of a copy operation.
     """
 
-    __slots__ = ["_years", "_months", "_weeks", "_days",
-                 "_hours", "_minutes", "_seconds"]
+    __slots__ = {
+        "_years", "_months", "_weeks", "_days",
+        "_hours", "_minutes", "_seconds"
+    }
 
-    def __init__(self, years=0, months=0, weeks=0, days=0,
-                 hours=0.0, minutes=0.0, seconds=0.0, standardize=False,
-                 _is_empty_instance=False):
+    def __init__(
+        self,
+        years: int = 0,
+        months: int = 0,
+        weeks: int | None = None,
+        days: int = 0,
+        hours: float = 0.0,
+        minutes: float = 0.0,
+        seconds: float = 0.0,
+        standardize: bool = False,
+        _is_empty_instance: bool = False
+    ):
         if _is_empty_instance:
             return
         _type_checker(
@@ -502,18 +516,18 @@ class Duration:
             (minutes, "minutes", int, float, None),
             (seconds, "seconds", int, float, None)
         )
-        self._years = years
-        self._months = months
-        self._weeks = None
-        self._days = days
+        self._years: int | None = years
+        self._months: int | None = months
+        self._weeks: int | None = None
+        self._days: int | None = days
         if weeks is not None:
             if days is None:
                 self._days = CALENDAR.DAYS_IN_WEEK * weeks
             else:
                 self._days += CALENDAR.DAYS_IN_WEEK * weeks
-        self._hours = hours
-        self._minutes = minutes
-        self._seconds = seconds
+        self._hours: float | None = hours
+        self._minutes: float | None = minutes
+        self._seconds: float | None = seconds
         if (weeks and not years and not months and not days and
                 not hours and not minutes and not seconds):
             self._weeks = self._days // CALENDAR.DAYS_IN_WEEK
@@ -572,7 +586,7 @@ class Duration:
         (weeks, days, hours, minutes or seconds) only."""
         return not (self._years or self._months)
 
-    def get_days_and_seconds(self):
+    def get_days_and_seconds(self) -> tuple[int, float]:
         """Return a roughly-converted duration in days and seconds.
 
         This cannot be accurate for non-uniform units such as years and
@@ -598,7 +612,7 @@ class Duration:
         new_days += diff_days
         return new_days, new_seconds
 
-    def get_seconds(self):
+    def get_seconds(self) -> float:
         """Return a roughly-converted duration in seconds.
 
         This is not rigorous when converting from non-uniform units
@@ -620,11 +634,11 @@ class Duration:
                 self._hours * CALENDAR.SECONDS_IN_HOUR +
                 self._minutes * CALENDAR.SECONDS_IN_MINUTE + self._seconds)
 
-    def get_is_in_weeks(self):
+    def get_is_in_weeks(self) -> bool:
         """Return whether we are in week representation."""
         return self._weeks is not None
 
-    def to_days(self) -> 'Duration':
+    def to_days(self) -> Self:
         """Return a new Duration in day representation rather than weeks."""
         if self.get_is_in_weeks():
             new = self._copy()
@@ -637,7 +651,7 @@ class Duration:
             return new
         return self
 
-    def to_weeks(self):
+    def to_weeks(self) -> Self:
         """Return a new Duration in week representation (use with caution -
         this returns the floor of the decimal number of weeks, so might lose
         precision)."""
@@ -646,7 +660,7 @@ class Duration:
             return Duration(weeks=weeks)
         return self
 
-    def __abs__(self) -> 'Duration':
+    def __abs__(self) -> Self:
         new = self.__class__(_is_empty_instance=True)
         for attr in self.__slots__:
             value: int | float | None = getattr(self, attr)
@@ -654,7 +668,7 @@ class Duration:
         return new
 
     @overload
-    def __add__(self, other: 'Duration') -> 'Duration': ...
+    def __add__(self, other: 'Duration') -> Self: ...
 
     @overload
     def __add__(self, other: 'TimePoint') -> 'TimePoint': ...
@@ -664,7 +678,7 @@ class Duration:
 
     def __add__(
         self, other: object
-    ) -> 'Duration | TimePoint | TimeRecurrence':
+    ) -> 'Self | TimePoint | TimeRecurrence':
         if isinstance(other, Duration):
             new = self._copy()
             if new.get_is_in_weeks():
@@ -685,15 +699,15 @@ class Duration:
             return other + self
         return NotImplemented
 
-    def __sub__(self, other: object) -> 'Duration':
+    def __sub__(self, other: object) -> Self:
         if not isinstance(other, Duration):
             return NotImplemented
         return self + -1 * other
 
-    def __neg__(self) -> 'Duration':
+    def __neg__(self) -> Self:
         return -1 * self
 
-    def __mul__(self, other: object) -> 'Duration':
+    def __mul__(self, other: object) -> Self:
         # TODO: support float multiplication?
         if not isinstance(other, int):
             return NotImplemented
@@ -703,10 +717,10 @@ class Duration:
             setattr(new, attr, value * other if value else value)
         return new
 
-    def __rmul__(self, other: object) -> 'Duration':
+    def __rmul__(self, other: object) -> Self:
         return self.__mul__(other)
 
-    def __floordiv__(self, other):
+    def __floordiv__(self, other: int) -> Self:
         # TODO: support float division?
         if not isinstance(other, int):
             raise TypeError(
@@ -767,13 +781,13 @@ class Duration:
             return self.get_days_and_seconds() >= other.get_days_and_seconds()
         return NotImplemented
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         for attr in self.__slots__:
             if getattr(self, attr, None):
                 return True
         return False
 
-    def __str__(self):
+    def __str__(self) -> str:
         if not self:
             return "P0Y"
 
@@ -817,7 +831,7 @@ class Duration:
         total_string = start_string + content_string
         return total_string.replace(".", ",")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<{0}.{1}: {2}>".format(
             self.__module__, self.__class__.__name__, str(self))
 
@@ -838,12 +852,19 @@ class TimeZone(Duration):
         should be set as part of a copy operation.
     """
 
-    __slots__ = [*Duration.__slots__, "_unknown"]
+    __slots__ = {*Duration.__slots__, "_unknown"}
 
-    to_weeks = property(doc='Unavailable/not inherited')
+    to_weeks = property(  # type: ignore[assignment]
+        doc='Unavailable/not inherited'
+    )
 
-    def __init__(self, hours=0, minutes=0, unknown=False,
-                 _is_empty_instance=False):
+    def __init__(
+        self,
+        hours: int = 0,
+        minutes: int = 0,
+        unknown: bool = False,
+        _is_empty_instance: bool = False
+    ):
         if _is_empty_instance:
             return
         if hours is None:
@@ -865,21 +886,22 @@ class TimeZone(Duration):
             _bounds_checker(minutes, "TimeZone minutes",
                             min_val=min_minutes, max_val=max_minutes)
         self._unknown = unknown
-        self._hours = hours
-        self._minutes = minutes
+        self._hours: int = hours
+        self._minutes: int = minutes
         for attr in ["_years", "_months", "_days", "_seconds"]:
             setattr(self, attr, 0)
         self._weeks = None
 
     @property
-    def unknown(self): return self._unknown
+    def unknown(self) -> bool:
+        return self._unknown
 
     def __hash__(self) -> int:
         # TODO: Do we have to worry about the possibility of a hash collision
         # between instances of two different classes?
         return hash((self._unknown, self._hours, self._minutes))
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self._unknown:
             return ""
         if self._hours == 0 and self._minutes == 0:
@@ -1212,31 +1234,31 @@ class TimePoint:
     @property
     def dump_format(self): return self._dump_format
 
-    def get_is_calendar_date(self):
+    def get_is_calendar_date(self) -> bool:
         """Return whether this is in years, month-of-year, day-of-month."""
         return self._month_of_year is not None
 
-    def get_is_ordinal_date(self):
+    def get_is_ordinal_date(self) -> bool:
         """Return whether this is in years, day-of-the year format."""
         return self._day_of_year is not None
 
-    def get_is_week_date(self):
+    def get_is_week_date(self) -> bool:
         """Return whether this is in years, week-of-year, day-of-week."""
         return self._week_of_year is not None
 
-    def get_calendar_date(self):
+    def get_calendar_date(self) -> tuple[int, int, int]:
         """Return the year, month-of-year and day-of-month for this date."""
         if self.get_is_calendar_date():
             return self._year, self._month_of_year, self._day_of_month
         if self.get_is_ordinal_date():
-            return get_calendar_date_from_ordinal_date(self._year,
-                                                       self._day_of_year)
-        if self.get_is_week_date():
-            return get_calendar_date_from_week_date(self._year,
-                                                    self._week_of_year,
-                                                    self._day_of_week)
+            return get_calendar_date_from_ordinal_date(
+                self._year, self._day_of_year
+            )
+        return get_calendar_date_from_week_date(
+            self._year, self._week_of_year, self._day_of_week
+        )
 
-    def get_hour_minute_second(self):
+    def get_hour_minute_second(self) -> tuple[float, float, float]:
         """Return the time of day expressed in hours, minutes, seconds."""
         hour_of_day = self._hour_of_day
         minute_of_hour = self._minute_of_hour
@@ -1251,18 +1273,17 @@ class TimePoint:
             second_of_minute = CALENDAR.SECONDS_IN_MINUTE * minute_decimals
         return hour_of_day, minute_of_hour, second_of_minute
 
-    def get_ordinal_date(self):
+    def get_ordinal_date(self) -> tuple[int, int]:
         """Return the year, day-of-year for this date."""
         if self.get_is_calendar_date():
-            return get_ordinal_date_from_calendar_date(self._year,
-                                                       self._month_of_year,
-                                                       self._day_of_month)
+            return get_ordinal_date_from_calendar_date(
+                self._year, self._month_of_year, self._day_of_month
+            )
         if self.get_is_ordinal_date():
             return self._year, self._day_of_year
-        if self.get_is_week_date():
-            return get_ordinal_date_from_week_date(self._year,
-                                                   self._week_of_year,
-                                                   self._day_of_week)
+        return get_ordinal_date_from_week_date(
+            self._year, self._week_of_year, self._day_of_week
+        )
 
     @property
     def year_sign(self): return "+" if self._year >= 0 else "-"
@@ -1318,7 +1339,7 @@ class TimePoint:
         # N.B. This needs altering if we implement leap seconds.
         return int(CALENDAR.SECONDS_IN_DAY * days + seconds)
 
-    def get(self, property_name):
+    def get(self, property_name: str) -> NoReturn:
         """Obsolete method for returning calculated value for property name."""
         raise NotImplementedError(
             "The method TimePoint.get('{0}') is obsolete; use TimePoint.{0} "
@@ -1356,17 +1377,17 @@ class TimePoint:
             return False
         return self._time_zone._hours == 0 and self._time_zone._minutes == 0
 
-    def get_week_date(self):
+    def get_week_date(self) -> tuple[int, int, int]:
         """Return the year, week-of-year, day-of-week for this date."""
         if self.get_is_calendar_date():
-            return get_week_date_from_calendar_date(self._year,
-                                                    self._month_of_year,
-                                                    self._day_of_month)
+            return get_week_date_from_calendar_date(
+                self._year, self._month_of_year, self._day_of_month
+            )
         if self.get_is_ordinal_date():
-            return get_week_date_from_ordinal_date(self._year,
-                                                   self._day_of_year)
-        if self.get_is_week_date():
-            return self._year, self._week_of_year, self._day_of_week
+            return get_week_date_from_ordinal_date(
+                self._year, self._day_of_year
+            )
+        return self._year, self._week_of_year, self._day_of_week
 
     def get_time_zone_offset(self, other: 'TimePoint') -> 'Duration':
         """Get the difference in hours and minutes between time zones.
@@ -1770,8 +1791,8 @@ class TimePoint:
             return True
         other = other.to_time_zone(self._time_zone)
         if self.get_is_calendar_date():
-            my_date = self.get_calendar_date()
-            other_date = other.get_calendar_date()
+            my_date: tuple[int, ...] = self.get_calendar_date()
+            other_date: tuple[int, ...] = other.get_calendar_date()
         else:
             my_date = self.get_ordinal_date()
             other_date = other.get_ordinal_date()
@@ -2209,7 +2230,7 @@ class TimePoint:
             date_string = ""
         return date_string + time_string
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<{0}.{1}: {2}>".format(
             self.__module__, self.__class__.__name__, str(self))
 
@@ -2223,7 +2244,7 @@ def _format_remainder(float_time_number):
 
 
 @lru_cache(maxsize=100000)
-def get_is_leap_year(year):
+def get_is_leap_year(year: int) -> bool:
     """Return if year is a leap year."""
     year_is_leap = False
     for factor, is_leap_factor in CALENDAR.LEAP_YEAR_FACTOR_TRUTHS:

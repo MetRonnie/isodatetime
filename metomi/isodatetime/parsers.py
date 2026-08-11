@@ -19,15 +19,17 @@
 """This provides ISO 8601 parsing functionality."""
 
 import re
+from typing import Any
 
 from . import data
 from . import parser_spec
 from . import timezone
 from metomi.isodatetime.exceptions import (
-    ISO8601SyntaxError, StrptimeConversionError)
+    ISO8601SyntaxError, StrptimeConversionError
+)
 
 
-class TimeRecurrenceParser(object):
+class TimeRecurrenceParser:
 
     """Parser for ISO 8601 recurrence expressions.
 
@@ -58,7 +60,7 @@ class TimeRecurrenceParser(object):
         else:
             self.duration_parser = duration_parser
 
-    def parse(self, expression):
+    def parse(self, expression: str) -> data.TimeRecurrence:
         """Parse a recurrence string into a TimeRecurrence instance."""
         for regex in self.RECURRENCE_REGEXES:
             result = regex.search(expression)
@@ -89,7 +91,7 @@ class TimeRecurrenceParser(object):
     __call__ = parse
 
 
-class TimePointParser(object):
+class TimePointParser:
 
     """Container for ISO 8601 date/time expressions.
 
@@ -213,27 +215,29 @@ class TimePointParser(object):
         expression = "^" + expression + "$"
         return expression
 
-    def parse(self, timepoint_string, dump_format=None, dump_as_parsed=False,
-              is_duration=False):
+    def parse(
+        self,
+        timepoint_string: str,
+        dump_format: str | None = None,
+        dump_as_parsed: bool = False,
+        is_duration: bool = False
+    ) -> data.TimePoint:
         """Parse a user-supplied timepoint string.
 
         Args:
-            timepoint_string (str):
+            timepoint_string:
                 Timepoint string used to retrieve date and time properties
                 from.
-            dump_format (str, optional):
+            dump_format:
                 The format to be used to dump data.
-            dump_as_parsed (bool, optional):
+            dump_as_parsed:
                 If True the dump format used will be picked based on the
                 parsed expression.
-            is_duration (bool, optional):
+            is_duration:
                 If True the datetime will not be checked to make sure values
                 are within bounds, and if the values of month_of_year,
                 day_of_month etc are not supplied they will be assumed to be 0
                 instead of 1.
-
-        Returns:
-            TimePoint
 
         """
         date_info, time_info, parsed_expr = self.get_info(timepoint_string)
@@ -537,7 +541,7 @@ class TimePointParser(object):
         return time_zone_info
 
 
-class DurationParser(object):
+class DurationParser:
 
     """Parser for ISO 8601 Durations (durations)."""
 
@@ -554,7 +558,7 @@ class DurationParser(object):
         re.compile(r"""^P(?P<weeks>\d+)W$""", re.X)
     ]
 
-    def parse(self, expression):
+    def parse(self, expression: str) -> data.Duration:
         """Parse an ISO duration expression into a Duration instance."""
         sign_factor = 1
         if expression.startswith("-"):
@@ -564,18 +568,17 @@ class DurationParser(object):
             result = rec_regex.search(expression)
             if not result:
                 continue
-            result_map = result.groupdict()
-            for key, value in list(result_map.items()):
+            result_map: dict[str, Any] = {}
+            for key, value in result.groupdict().items():
                 if value is None:
-                    result_map.pop(key)
                     continue
-                if key in ["years", "months", "days", "weeks"]:
-                    value = int(value)
+                if key in {"years", "months", "days", "weeks"}:
+                    number: int | float = int(value)
                 else:
                     if "," in value:
                         value = value.replace(",", ".")
-                    value = float(value)
-                result_map[key] = value * sign_factor
+                    number = float(value)
+                result_map[key] = number * sign_factor
             return data.Duration(**result_map)
         if expression.startswith("P") and sign_factor != -1:
             # TimePoint-like duration - don't allow our negative extension.
@@ -607,8 +610,11 @@ class DurationParser(object):
         raise ISO8601SyntaxError("duration", expression)
 
 
-def parse_timepoint_expression(timepoint_expression, is_duration=False,
-                               **kwargs):
+def parse_timepoint_expression(
+    timepoint_expression: str,
+    is_duration: bool = False,
+    **kwargs: object
+):
     """Return a data model that represents timepoint_expression."""
     parser = TimePointParser(**kwargs)
     return parser.parse(timepoint_expression, is_duration=is_duration)
