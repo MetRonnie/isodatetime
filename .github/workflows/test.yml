@@ -19,25 +19,23 @@ jobs:
     timeout-minutes: 40
     strategy:
       matrix:
-        os: [ubuntu-latest]
-        python-version: ['3.11', '3.12']
-        coverage: [false]
         include:
-          # Modify existing configurations:
+          # Coverage:
           - os: ubuntu-latest
-            python-version: '3.12'
-            coverage: false
-            tz: 'XXX-05:30'  # UTC+05:30
-          # Add new configurations:
-          - os: ubuntu-22.04
-            python-version: '3.10' # oldest supported version
-            coverage: false
-          - os: ubuntu-latest
-            python-version: '3'
+            python-version: '3.x'
             coverage: true
+          # UTC+05:30 timezone:
+          - os: ubuntu-latest
+            python-version: '3.x'
+            tz: 'XXX-05:30'
+          # Oldest supported python version:
+          - os: ubuntu-22.04
+            python-version: '3.11'
+          # Other OSes:
           - os: macos-latest
-            python-version: '3.10' # oldest supported version
-            coverage: false
+            python-version: '3.x'
+          - os: windows-latest
+            python-version: '3.x'
     name: ${{ matrix.os }} py-${{ matrix.python-version }} ${{ matrix.tz }} ${{ matrix.coverage && '(coverage)' || '' }}
     env:
       PYTEST_ADDOPTS: -n 5 -m 'slow or not slow' --color=yes
@@ -53,13 +51,14 @@ jobs:
       - name: Install
         run: pip install -e .[all]
 
-      - name: Style
-        if: ${{ !matrix.coverage }}
-        run: flake8
+      - parallel:
+        - name: Style
+          if: ${{ !matrix.coverage }}
+          run: flake8
 
-      - name: Bandit
-        if: ${{ !matrix.coverage }}
-        run: bandit -r metomi/isodatetime -c pyproject.toml
+        - name: Bandit
+          if: ${{ !matrix.coverage }}
+          run: bandit -r metomi/isodatetime -c pyproject.toml
 
       - name: Run tests
         env:
@@ -83,8 +82,8 @@ jobs:
 
   codecov-upload:
     needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
+    runs-on: ubuntu-slim
+    timeout-minutes: 4
     steps:
       - name: Checkout
         uses: actions/checkout@v7

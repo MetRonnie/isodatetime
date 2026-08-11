@@ -23,6 +23,7 @@ import operator
 from typing import (
     Any,
     Literal,
+    Self,
     cast,
     overload,
 )
@@ -557,7 +558,7 @@ class Duration:
     @property
     def seconds(self): return self._seconds
 
-    def _copy(self) -> 'Duration':
+    def _copy(self) -> Self:
         """Return an (unlinked) copy of this instance."""
         new = self.__class__(_is_empty_instance=True)
         for attr in self.__slots__:
@@ -1718,7 +1719,7 @@ class TimePoint:
                     new._week_of_year = max_weeks_in_year
         return new
 
-    def _copy(self) -> 'TimePoint':
+    def _copy(self) -> Self:
         """Returns an unlinked copy of this instance."""
         new_timepoint = TimePoint(is_empty_instance=True)
         for attr in self.__slots__:
