@@ -1086,26 +1086,23 @@ class TestSuite(unittest.TestCase):
 
     def test_timepoint_dumper(self):
         """Test the dumping of TimePoint instances."""
-        parser = parsers.TimePointParser(allow_truncated=True,
-                                         default_to_unknown_time_zone=True)
+        parser = parsers.TimePointParser(
+            allow_truncated=True, default_to_unknown_time_zone=True
+        )
         dumper = dumpers.TimePointDumper()
         for expression, timepoint_kwargs in get_timepointparser_tests(
-                allow_truncated=True):
+            allow_truncated=True
+        ):
             ctrl_timepoint = data.TimePoint(**timepoint_kwargs)
-            try:
-                test_timepoint = parser.parse(str(ctrl_timepoint))
-            except ISO8601SyntaxError as syn_exc:
-                raise ValueError(
-                    "Parsing failed for the dump of {0}: {1}".format(
-                        expression, syn_exc))
-            self.assertEqual(test_timepoint,
-                             ctrl_timepoint, expression)
-        for timepoint_kwargs, format_results in (
-                get_timepoint_dumper_tests()):
+            test_timepoint = parser.parse(str(ctrl_timepoint))
+            assert test_timepoint == ctrl_timepoint, expression
+
+        for timepoint_kwargs, format_results in get_timepoint_dumper_tests():
             ctrl_timepoint = data.TimePoint(**timepoint_kwargs)
             for format_, ctrl_data in format_results:
                 test_data = dumper.dump(ctrl_timepoint, format_)
-                self.assertEqual(test_data, ctrl_data, format_)
+                assert test_data == ctrl_data, format_
+
         for timepoint_kwargs, format_exception_results in (
                 get_timepointdumper_failure_tests()):
             ctrl_timepoint = data.TimePoint(**timepoint_kwargs)
@@ -1373,11 +1370,11 @@ class TestSuite(unittest.TestCase):
                 test_results.append(str(time_point))
             self.assertEqual(test_results, ctrl_results, expression)
             if test_recurrence.start_point is None:
-                forward_method = test_recurrence.get_prev
-                backward_method = test_recurrence.get_next
+                forward_method = test_recurrence._prev_before_valid
+                backward_method = test_recurrence._next_after_valid
             else:
-                forward_method = test_recurrence.get_next
-                backward_method = test_recurrence.get_prev
+                forward_method = test_recurrence._next_after_valid
+                backward_method = test_recurrence._prev_before_valid
             test_points = [test_recurrence[0]]
             for i in range(1, reps):
                 test_points.append(forward_method(test_points[-1]))
@@ -1405,7 +1402,7 @@ class TestSuite(unittest.TestCase):
             for timepoint_expression, ctrl_is_member in results:
                 timepoint = parsers.parse_timepoint_expression(
                     timepoint_expression)
-                test_is_member = test_recurrence.get_is_valid(timepoint)
+                test_is_member = test_recurrence.is_valid(timepoint)
                 self.assertEqual(test_is_member, ctrl_is_member,
                                  timepoint_expression + " in " + expression)
         for expression, results in get_timerecurrence_first_after_tests():
@@ -1528,6 +1525,43 @@ class TestSuite(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.assertEqual("1984-01-01T00:00:00Z", str(t))
         # QUESTION: What was this test meant to do exactly?
+
+
+tp_parser = parsers.TimePointParser()
+tr_parser = parsers.TimeRecurrenceParser()
+
+
+@pytest.mark.parametrize(
+    'recurrence_str, timepoint_str, expected',
+    [
+        ('R3/2026-01-01T00Z/PT7H', '2026-01-01T00:00Z', True),
+        ('R3/2026-01-01T00Z/PT7H', '2026-01-01T07:00Z', True),
+        ('R3/2026-01-01T00Z/PT7H', '2026-01-01T14:00Z', True),
+        ('R3/2026-01-01T00Z/PT7H', '2026-01-01T21:00Z', False),
+        ('R3/2026-01-01T00Z/PT7H', '2026-01-01T00:01Z', False),
+        ('R3/2026-01-01T00Z/PT7H', '2025-12-31T17:00Z', False),
+        # Test decimals in duration:
+        ('R/2026-02-10T03Z/PT1.5H', '2026-02-10T07:30Z', True),
+        ('R/2026-01-01T00Z/PT0.02S', '2026-01-01T00:00:05.1Z', True),
+        pytest.param(
+            'R/1000-01-01T00Z/PT0.05S', '3000-01-01T00Z', True,
+            marks=pytest.mark.xfail(
+                reason="Exceeded float precision", strict=False
+            ),
+        ),
+        # When duration is in exact units, fast:
+        ('R/0001-01-01T00Z/PT1H', '9999-01-01T00:00Z', True),
+        # When duration is in inexact units, slow unfortunately:
+        pytest.param(
+            'R/0001-01-01T00Z/P1M', '9999-01-01T00:00Z', True,
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_recurrence_is_valid(recurrence_str, timepoint_str, expected):
+    recurrence = tr_parser.parse(recurrence_str)
+    timepoint = tp_parser.parse(timepoint_str)
+    assert recurrence.is_valid(timepoint) == expected
 
 
 def test_strptime_bad(tp_parser: parsers.TimePointParser):
