@@ -22,7 +22,7 @@ Or with conda: see https://github.com/conda-forge/metomi-isodatetime-feedstock
 
 ## Usage
 
-Python API:
+### Python API
 
 <!-- GitHub Python syntax highlighting has issues with datetimes, Ruby works
      reasonably well as a stand-in. -->
@@ -43,8 +43,8 @@ Python API:
 <metomi.isodatetime.data.TimePoint: 2001-01-01T03:00:00Z>
 
 # Recurrences
->>> recurrence = parse.TimeRecurrenceParser().parse('R/1999/P1Y')
->>> recurrence.get_next(date_time)
+>>> recurrence = parse.TimeRecurrenceParser().parse('R/1999-01-01T00Z/P1Y')
+>>> recurrence.next_after(date_time)
 <metomi.isodatetime.data.TimePoint: 2001-01-01T00:00:00Z>
 
 # Output
@@ -53,7 +53,7 @@ Python API:
 
 ```
 
-CLI:
+### CLI
 
 ```console
 $ isodatetime

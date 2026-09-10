@@ -20,20 +20,49 @@
 
 
 from functools import lru_cache
-from math import floor
+from math import (
+    floor,
+    isclose,
+    log10,
+)
 import operator
 from typing import (
+    TYPE_CHECKING,
     Any,
     Literal,
     cast,
     overload,
 )
+from warnings import deprecated
 
 from . import (
     dumpers,
     timezone,
 )
 from .exceptions import BadInputError
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+
+_SECS_PRECISION = 1e-6
+"""Isodatetime supports a 1μs precision for floating-point seconds."""
+# N.B. we should instead use the decimal module for exact arithmetic
+
+_PRECISION_DIGITS = int(-log10(_SECS_PRECISION))
+
+
+def modulo_secs(x: float, y: float) -> float:
+    """Return x % y, accounting for floating-point precision if the result is
+    effectively zero."""
+    result = x % y
+    if (
+        isclose(result, 0, abs_tol=_SECS_PRECISION) or
+        isclose(result, y, abs_tol=_SECS_PRECISION)
+    ):
+        return 0
+    return result
 
 
 _operator_map = {op.__name__: op for op in [
@@ -285,10 +314,21 @@ class TimeRecurrence:
     @property
     def format_number(self): return self._format_number
 
-    def get_is_valid(self, timepoint: 'TimePoint') -> bool:
+    def is_valid(self, timepoint: 'TimePoint') -> bool:
         """Return whether the timepoint is valid for this recurrence."""
-        if not self._get_is_in_bounds(timepoint):
+        if not self._is_in_bounds(timepoint):
             return False
+        if self._duration is not None and self._duration.is_exact():
+            # Since it's exact, we can do maths instead of iterating
+            ref_point = (
+                self._start_point
+                if self._start_point is not None
+                else self._end_point
+            )
+            offset_secs = (timepoint - ref_point).get_seconds()
+            duration_secs = self._duration.get_seconds()
+            return modulo_secs(offset_secs, duration_secs) == 0
+        # Since duration is inexact, we have to iterate
         for iter_timepoint in self.__iter__():
             if iter_timepoint == timepoint:
                 return True
@@ -298,50 +338,93 @@ class TimeRecurrence:
                 return False
         return False
 
-    def get_next(self, timepoint: 'TimePoint') -> 'TimePoint | None':
+    # Alias for backward compatibility
+    get_is_valid = is_valid
+
+    def _next_after_valid(
+        self, timepoint: 'TimePoint | None'
+    ) -> 'TimePoint | None':
         """Return the next timepoint after this timepoint in the recurrence
-        series, or None."""
+        series, or None.
+
+        NOTE: the timepoint MUST be part of the series.
+        """
         if self._repetitions == 1 or timepoint is None:
             return None
         next_timepoint = timepoint + self._duration
-        if self._get_is_in_bounds(next_timepoint):
+        if self._is_in_bounds(next_timepoint):
             return next_timepoint
         return None
 
-    def get_prev(self, timepoint: 'TimePoint') -> 'TimePoint | None':
+    def _prev_before_valid(
+        self, timepoint: 'TimePoint | None'
+    ) -> 'TimePoint | None':
         """Return the previous timepoint before this timepoint in the
-        recurrence series, or None."""
+        recurrence series, or None.
+
+        NOTE: the timepoint MUST be part of the series.
+        """
         if self._repetitions == 1 or timepoint is None:
             return None
         prev_timepoint = timepoint - self._duration
-        if self._get_is_in_bounds(prev_timepoint):
+        if self._is_in_bounds(prev_timepoint):
             return prev_timepoint
         return None
 
-    def get_first_after(self, timepoint: 'TimePoint') -> 'TimePoint | None':
+    get_next = deprecated(
+        "get_next() will be removed in 4.0 due to its confusing behaviour. "
+        "It implicitly expected the provided timepoint to be part of the "
+        "series, though this was not documented. "
+        "Use next() or next_after() instead."
+    )(_next_after_valid)
+
+    get_prev = deprecated(
+        "get_prev() will be removed in 4.0 due to its confusing behaviour. "
+        "It implicitly expected the provided timepoint to be part of the "
+        "series, though this was not documented. "
+        "Use prev() or prev_before() instead."
+    )(_prev_before_valid)
+
+    def next(self, timepoint: 'TimePoint') -> 'TimePoint | None':
         """Return the next timepoint in the series after the given timepoint
         which is not necessarily part of the series.
 
         If the given timepoint is before the start point, return the
         start point, or if it is after the end point, return None.
         """
-        if self._get_is_in_bounds(timepoint):
+        if self._is_in_bounds(timepoint):
             if self._duration is not None and self._duration.is_exact():
                 # Since it's exact, we can do maths instead of iterating
-                iterations, seconds_since = divmod(
-                    (timepoint - self._start_point).get_seconds(),
-                    self._duration.get_seconds())
-                return timepoint + (self._duration - Duration(
-                    seconds=floor(seconds_since)))
-            else:
-                # Since duration is inexact, we have to iterate
-                current = self._start_point
-                while current is not None and current <= timepoint:
-                    current = self.get_next(current)
-                return current
+                offset_secs = (timepoint - self._start_point).get_seconds()
+                duration_secs = self._duration.get_seconds()
+                diff = offset_secs % duration_secs
+                if modulo_secs(offset_secs, duration_secs) != 0:
+                    timepoint += self._duration - Duration(seconds=diff)
+                return timepoint
+            # Since duration is inexact, we have to iterate
+            current = self._start_point
+            while current is not None and current < timepoint:
+                current = self._next_after_valid(current)
+            return current
         elif timepoint < self._start_point:
             return self._start_point
         return None
+
+    def next_after(self, timepoint: 'TimePoint') -> 'TimePoint | None':
+        """Return the next timepoint in the series after the given timepoint
+        which is not necessarily part of the series.
+
+        If the given timepoint is before the start point, return the
+        start point, or if it is after the end point, return None.
+        """
+        ret = self.next(timepoint)
+        if ret == timepoint:
+            return self._next_after_valid(ret)
+        return ret
+
+    get_first_after = deprecated(
+        "get_first_after() will be removed in 4.0. Use next_after() instead."
+    )(next_after)
 
     def __getitem__(self, index: int) -> 'TimePoint':
         if index < 0 or not isinstance(index, int):
@@ -351,7 +434,7 @@ class TimeRecurrence:
                 return point
         raise IndexError("Invalid index for TimeRecurrence")
 
-    def _get_is_in_bounds(self, timepoint: 'TimePoint') -> bool:
+    def _is_in_bounds(self, timepoint: 'TimePoint') -> bool:
         """Return whether the timepoint is within this recurrence series."""
         if timepoint is None:
             return False
@@ -365,28 +448,22 @@ class TimeRecurrence:
             return False
         return True
 
-    def __iter__(self):
+    def __iter__(self) -> 'Iterator[TimePoint]':
         if self._start_point is None:
             point = self._end_point
-            in_reverse = True
+            iter_func = self._prev_before_valid
         else:
             point = self._start_point
-            in_reverse = False
+            iter_func = self._next_after_valid
 
-        if self._repetitions == 1 or not self._duration:
-            if self._get_is_in_bounds(point):
-                yield point
-            point = None
+        if (
+            self._repetitions == 1 or not self._duration
+        ) and self._is_in_bounds(point):
+            return point
 
-        while point is not None:
-            if self._get_is_in_bounds(point):
-                yield point
-            else:
-                break
-            if in_reverse:
-                point = self.get_prev(point)
-            else:
-                point = self.get_next(point)
+        while point is not None and self._is_in_bounds(point):
+            yield point
+            point = iter_func(point)
 
     def __hash__(self) -> int:
         return hash((self._repetitions, self._start_point, self._end_point,
@@ -1324,19 +1401,16 @@ class TimePoint:
             "or getattr() instead".format(property_name))
         # return getattr(self, property_name)
 
-    def _decimal_string(self, attr):
+    def _decimal_string(self, attr: str) -> str:
         """Return the decimal digits (after the decimal point) of the specified
-        attribute as a string. Rounds to 6 d.p."""
-        decimal = float(getattr(self, attr)) - int(getattr(self, attr))
-        if decimal >= 0.9999995:
+        attribute as a string."""
+        val = getattr(self, attr)
+        int_str, decimal_str = f"{val:.{_PRECISION_DIGITS}f}".split(".", 1)
+        if int(int_str) != floor(val):
             # Truncate instead of rounding up because ticking over the higher
             # quantities would be complicated
             return "999999"
-        string = "%0.6f" % decimal
-        string = string.split(".", 1)[1].rstrip("0")
-        if not string:
-            return "0"
-        return string
+        return decimal_str.rstrip("0") or "0"
 
     def get_second_of_day(self):
         """Return the seconds elapsed since the start of the day."""
